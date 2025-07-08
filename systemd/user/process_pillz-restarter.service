@@ -1,0 +1,6 @@
+[Unit]
+Description=process_pillz restarter
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl --user restart process_pillz.service

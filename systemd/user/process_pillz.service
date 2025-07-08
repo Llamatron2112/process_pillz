@@ -1,0 +1,12 @@
+[Unit]
+Description=Automatically switch tuned profile and sched-ext based on process
+Wants=process_pillz-restarter.path
+
+[Service]
+ExecStart=/usr/local/bin/process_pillz
+Type=simple
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,19 @@
+scan_interval: 3
+
+triggers:
+  WoWClassic.exe: game
+  DuneSandbox.exe: game
+  enshrouded.exe: game
+  kcalc: game
+
+pills:
+  default:
+    scx: none
+    tuned: desktop
+  game:
+    tuned: gaming
+    scx: lavd 1
+    nice: -10
+  ai:
+    tuned: accelerator-performance
+    scx: bpfland
