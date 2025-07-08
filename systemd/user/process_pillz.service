@@ -3,10 +3,33 @@ Description=Automatically switch tuned profile and sched-ext based on process
 Wants=process_pillz-restarter.path
 
 [Service]
-ExecStart=/usr/local/bin/process_pillz
+ExecStart=process_pillz
 Type=simple
 StandardOutput=journal
 StandardError=journal
+
+# Security options
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+MemoryDenyWriteExecute=yes
+LockPersonality=yes
+
+# Only allow necessary capabilities
+CapabilityBoundingSet=CAP_SYS_NICE CAP_SYSLOG
+AmbientCapabilities=CAP_SYS_NICE
+
+# Restrict filesystem access
+PrivateTmp=yes
+ReadOnlyPaths=/
+ReadWritePaths=/proc
 
 [Install]
 WantedBy=default.target
