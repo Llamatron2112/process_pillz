@@ -31,7 +31,7 @@ func createLogger() *zap.SugaredLogger {
 		blue   = "\033[34m"
 		reset  = "\033[0m"
 	)
-
+	// Custom encoder configuration for colored log output
 	encoderConfig := zapcore.EncoderConfig{
 		MessageKey: "message",
 		LevelKey:   "level",

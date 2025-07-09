@@ -81,18 +81,16 @@ func (pm *PillManager) setScx(scx string) {
 // Check a process and its parent, and determines if it is elligible to being reniced
 func (pm *PillManager) reniceCheck(p *process.Process, nice int) {
 
-	pPid := p.Pid
-
 	// Get cached process info if available
-	procInfo, exists := pm.knownProcs[pPid]
+	procInfo, exists := pm.knownProcs[p.Pid]
 	if !exists {
-		Logger.Warnf("Process %d not found in cache during renice check", pPid)
+		Logger.Warnf("Process %d not found in cache during renice check", p.Pid)
 		return
 	}
 
 	pParent, err := p.Parent()
 	if err != nil {
-		Logger.Warnf("Couldn't get the parent of PID : %v", pPid, err)
+		Logger.Warnf("Couldn't get the parent of %d : %v", p.Pid, err)
 		return
 	}
 
@@ -101,16 +99,16 @@ func (pm *PillManager) reniceCheck(p *process.Process, nice int) {
 	parentReniced := parentExists && parentInfo.Reniced
 
 	// renicing the iterated proc, its sibling and chidren too, if a valid nice value is provided
-	if parentReniced || pParent.Pid == pm.currentParent || pPid == pm.currentProc {
-		err = syscall.Setpriority(syscall.PRIO_PROCESS, int(pPid), nice)
+	if parentReniced || pParent.Pid == pm.currentParent || p.Pid == pm.currentProc {
+		err = syscall.Setpriority(syscall.PRIO_PROCESS, int(p.Pid), nice)
 		if err != nil {
-			Logger.Warnf("Couldn't change nice value of PID %d : %v", pPid, err)
+			Logger.Warnf("Couldn't change nice value of %s PID %d : %v", procInfo.Name, p.Pid, err)
 			procInfo.Reniced = true
 			return
 		}
 
 		// Mark process as reniced
 		procInfo.Reniced = true
-		Logger.Infof("reniced PID %d", pPid)
+		Logger.Infof("reniced %s PID %d", procInfo.Name, p.Pid)
 	}
 }

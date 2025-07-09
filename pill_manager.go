@@ -12,11 +12,13 @@ import (
 )
 
 type ProcessInfo struct {
+	Name     string
 	Cmdline  string
 	Username string
 	Reniced  bool
 }
 
+// PillManager holds the state of the pill management system.
 type PillManager struct {
 	Triggers      map[string]string
 	Pillz         map[string]map[string]string
@@ -31,11 +33,11 @@ type PillManager struct {
 	currentScan   map[int32]bool         // Reused map for tracking current scan
 }
 
-var invalidParents = []string{"systemd", "bash", "sh", "zsh", "fish"}
+var invalidParents = []string{"systemd", "bash", "sh", "zsh", "fish", "steam"}
 
 // The object storing all the data
 func NewPillManager(cfg Config) *PillManager {
-
+	// Connecting to dbus
 	db, err := dbus.ConnectSystemBus()
 	if err != nil {
 		Logger.Fatalf("Couldn't connect to dbus")
@@ -94,11 +96,17 @@ func (pm *PillManager) scanProcesses() {
 		return
 	}
 
-	shouldKeepCurrentPill := false
-
-	// Track if we found a new trigger to switch to
+	var shouldKeepCurrentPill bool
 	var newPillToSwitch string
 	var triggerProcess *process.Process
+
+	current, err := process.NewProcess(pm.currentProc)
+	if err != nil {
+		shouldKeepCurrentPill = false
+	} else {
+		shouldKeepCurrentPill = true
+		triggerProcess = current
+	}
 
 	// initialise global variables out of the loop
 	curPill := pm.Pillz[pm.CurrentPill]
@@ -125,58 +133,58 @@ func (pm *PillManager) scanProcesses() {
 
 	// Run through the list of processes
 	for _, p := range processes {
-
-		pUser, err := p.Username()
-		if err != nil {
-			Logger.Warn("Can't get the user of a process : %v", err)
-			continue
-		}
-
-		// Do not deal with non user processes
-		if pUser != pm.userName {
-			continue
-		}
-
-		pPid := p.Pid
-
-		// If the currently active process is still here, remember it has been found, and on to the next process
-		if pPid == pm.currentProc {
-			shouldKeepCurrentPill = true
-		}
-
-		// Store this process' PID in the list of processes seen during this scan
-		pm.currentScan[pPid] = true
-
 		// If the process has already been tested, use cached info
-		procInfo, exists := pm.knownProcs[pPid]
+		procInfo, exists := pm.knownProcs[p.Pid]
 		if !exists {
-			pCmd, err := p.Cmdline()
+			pUser, err := p.Username()
 			if err != nil {
-				Logger.Warnf("Could not get command line of process %d", pPid)
+				Logger.Warn("Can't get the user of a process : %v", err)
+				continue
 			}
 
-			pm.knownProcs[pPid] = &ProcessInfo{
+			// Do not deal with non user processes
+			if pUser != pm.userName {
+				continue
+			}
+
+			pCmd, err := p.Cmdline()
+			if err != nil {
+				Logger.Warnf("Could not get command line of process %d", p.Pid)
+			}
+
+			pName, err := p.Name()
+			if err != nil {
+				Logger.Warnf("Could not get name of process %d", p.Pid)
+				pName = "unknown"
+			}
+
+			// Create a new ProcessInfo and add it to the knownProcs map
+			pm.knownProcs[p.Pid] = &ProcessInfo{
+				Name:     pName,
 				Cmdline:  pCmd,
 				Username: pUser,
 				Reniced:  false,
 			}
-			procInfo = pm.knownProcs[pPid]
+			procInfo = pm.knownProcs[p.Pid]
 		}
+		// Store this process' PID in the list of processes seen during this scan
+		pm.currentScan[p.Pid] = true
 
-		// if exists {
-		// Check if this cached process matches a trigger
-		pillName := pm.checkTriggerMatch(procInfo.Cmdline)
-		if pillName != "" {
-			if pillName == pm.CurrentPill && !shouldKeepCurrentPill {
-				shouldKeepCurrentPill = true
-				triggerProcess = p
-			} else {
-				// Check if there is a pill with that name
-				if _, pillExists := pm.Pillz[pillName]; pillExists {
-					newPillToSwitch = pillName
+		if !shouldKeepCurrentPill {
+			// Check if this cached process matches a trigger
+			pillName := pm.checkTriggerMatch(procInfo.Cmdline)
+			if pillName != "" {
+				if pillName == pm.CurrentPill {
+					shouldKeepCurrentPill = true
 					triggerProcess = p
 				} else {
-					Logger.Errorf("No pill named '%s'", pillName)
+					// Check if there is a pill with that name
+					if _, pillExists := pm.Pillz[pillName]; pillExists {
+						newPillToSwitch = pillName
+						triggerProcess = p
+					} else {
+						Logger.Errorf("No pill named '%s'", pillName)
+					}
 				}
 			}
 		}
@@ -198,17 +206,34 @@ func (pm *PillManager) scanProcesses() {
 	// Trigger and pills logic
 	if !shouldKeepCurrentPill && pm.CurrentPill != "default" {
 		pm.eatPill(nil, "default")
+
 	} else if newPillToSwitch != "" && newPillToSwitch != pm.CurrentPill {
 		pm.eatPill(triggerProcess, newPillToSwitch)
+
 	} else if shouldKeepCurrentPill && triggerProcess.Pid != pm.currentProc {
 		pm.currentProc = triggerProcess.Pid
 		pPar, err := triggerProcess.Parent()
+
 		if err != nil {
 			Logger.Warnf("Couldn't find the parent of trigger process %d", triggerProcess.Pid)
 			pm.currentParent = triggerProcess.Pid
-		} else {
+		}
+
+		parName, err := pPar.Name()
+		if err != nil {
+			Logger.Warnf("Couldn't find the parent name %d", triggerProcess.Pid)
+			pm.currentParent = triggerProcess.Pid
+		}
+
+		if slices.Contains(invalidParents, parName) {
+			Logger.Warnf("Invalid parent name %s", parName)
+			pm.currentParent = triggerProcess.Pid
+		}
+
+		if pm.currentParent != triggerProcess.Pid {
 			pm.currentParent = pPar.Pid
 		}
+
 		Logger.Infof("Changed trigger process to %d with parent %d", pm.currentProc, pm.currentParent)
 	}
 }
@@ -267,11 +292,7 @@ func (pm *PillManager) eatPill(p *process.Process, pillName string) {
 
 	pm.CurrentPill = pillName
 
-	// Perform an immediate scan after applying the pill
-	// pm.scanProcesses()
-
-	// Reset the ticker so next scan is at given interval
-	// pm.ticker.Reset(pm.scanInterval)
+	Logger.Infof("current %d, parent %d", pm.currentProc, pm.currentParent)
 }
 
 func (pm *PillManager) Close() {
