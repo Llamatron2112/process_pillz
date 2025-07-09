@@ -2,8 +2,7 @@ scan_interval: 3
 
 triggers:
   WoWClassic.exe: game
-  DuneSandbox.exe: game
-  enshrouded.exe: game
+  "SteamLaunch AppId=1172710": game
   kcalc: ai
 
 pills:

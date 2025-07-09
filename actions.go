@@ -104,7 +104,8 @@ func (pm *PillManager) reniceCheck(p *process.Process, nice int) {
 	if parentReniced || pParent.Pid == pm.currentParent || pPid == pm.currentProc {
 		err = syscall.Setpriority(syscall.PRIO_PROCESS, int(pPid), nice)
 		if err != nil {
-			Logger.Errorf("Couldn't change nice value of PID %d : %v", pPid, err)
+			Logger.Warnf("Couldn't change nice value of PID %d : %v", pPid, err)
+			procInfo.Reniced = true
 			return
 		}
 
