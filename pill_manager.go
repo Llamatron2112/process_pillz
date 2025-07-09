@@ -195,7 +195,7 @@ func (pm *PillManager) scanProcesses() {
 		}
 	}
 
-	// No matching process has been found, if the stored current pid has not been seen, return to default
+	// Trigger and pills logic
 	if !shouldKeepCurrentPill && pm.CurrentPill != "default" {
 		pm.eatPill(nil, "default")
 	} else if newPillToSwitch != "" && newPillToSwitch != pm.CurrentPill {
