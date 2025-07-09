@@ -92,10 +92,10 @@ func (pm *PillManager) reniceCheck(p *process.Process, nice int) {
 
 	pParent, err := p.Parent()
 	if err != nil {
-		Logger.Warnf("Couldn't get the parent of %s (PID %d): %v", procInfo.Name, pPid, err)
+		Logger.Warnf("Couldn't get the parent of PID : %v", pPid, err)
 		return
 	}
-	
+
 	// Check if parent has been reniced
 	parentInfo, parentExists := pm.knownProcs[pParent.Pid]
 	parentReniced := parentExists && parentInfo.Reniced
@@ -104,12 +104,12 @@ func (pm *PillManager) reniceCheck(p *process.Process, nice int) {
 	if parentReniced || pParent.Pid == pm.currentParent || pPid == pm.currentProc {
 		err = syscall.Setpriority(syscall.PRIO_PROCESS, int(pPid), nice)
 		if err != nil {
-			Logger.Errorf("Couldn't change nice value of %s, (%d): %v", procInfo.Name, pPid, err)
+			Logger.Errorf("Couldn't change nice value of PID %d : %v", pPid, err)
 			return
 		}
 
 		// Mark process as reniced
 		procInfo.Reniced = true
-		Logger.Infof("reniced: %s (%v)", procInfo.Name, pPid)
+		Logger.Infof("reniced PID %d", pPid)
 	}
 }

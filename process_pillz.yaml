@@ -4,7 +4,7 @@ triggers:
   WoWClassic.exe: game
   DuneSandbox.exe: game
   enshrouded.exe: game
-  kcalc: game
+  kcalc: ai
 
 pills:
   default:

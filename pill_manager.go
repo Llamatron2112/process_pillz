@@ -4,6 +4,7 @@ import (
 	"os/user"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/godbus/dbus/v5"
@@ -11,7 +12,7 @@ import (
 )
 
 type ProcessInfo struct {
-	Name     string
+	Cmdline  string
 	Username string
 	Reniced  bool
 }
@@ -75,6 +76,15 @@ func NewPillManager(cfg Config) *PillManager {
 	}
 }
 
+func (pm *PillManager) checkTriggerMatch(cmd string) string {
+	for trigger, pill := range pm.Triggers {
+		if strings.Contains(cmd, trigger) {
+			return pill
+		}
+	}
+	return ""
+}
+
 // Look for a process matching one in the triggers list
 func (pm *PillManager) scanProcesses() {
 	// Fetching all the currently running processes
@@ -127,7 +137,8 @@ func (pm *PillManager) scanProcesses() {
 			// Only process triggers and renice for user-owned processes
 			if procInfo.Username == pm.userName {
 				// Check if this cached process matches a trigger
-				if pillName, trigExists := pm.Triggers[procInfo.Name]; trigExists && pm.CurrentPill != pillName {
+				pillName := pm.checkTriggerMatch(procInfo.Cmdline)
+				if pillName != "" && pm.CurrentPill != pillName {
 					// Check if there is a pill with that name, and if yes eat it
 					if _, pillExists := pm.Pillz[pillName]; pillExists {
 						pm.eatPill(p, pillName)
@@ -160,10 +171,10 @@ func (pm *PillManager) scanProcesses() {
 			continue
 		}
 
-		// Getting the process' name
-		pName, err := p.Name()
+		// Getting the process' command line
+		pCmd, err := p.Name()
 		if err != nil {
-			Logger.Warnf("Can't get the name of the process with PID %d: %v", pPid, err)
+			Logger.Warnf("Can't get the command line of the process with PID %d: %v", pPid, err)
 			pm.knownProcs[pPid] = &ProcessInfo{
 				Username: pUser,
 				Reniced:  false,
@@ -173,16 +184,15 @@ func (pm *PillManager) scanProcesses() {
 
 		// Cache the process info
 		pm.knownProcs[pPid] = &ProcessInfo{
-			Name:     pName,
 			Username: pUser,
 			Reniced:  false,
 		}
 
 		// Check if iterated process matches an entry in Triggers map
-		pillName, trigExists := pm.Triggers[pName]
+		pillName := pm.checkTriggerMatch(pCmd)
 
 		// If it does, and the current profile is the default one, apply the profile (pill)
-		if trigExists && pm.CurrentPill != pillName {
+		if pillName != "" && pm.CurrentPill != pillName {
 
 			// Check if there is a pill with that name, and if yes eat it
 			_, pillExists := pm.Pillz[pillName]
@@ -213,7 +223,6 @@ func (pm *PillManager) scanProcesses() {
 		pm.eatPill(nil, "default")
 		pm.currentProc = 0
 		pm.currentParent = 0
-		pm.knownProcs = make(map[int32]*ProcessInfo)
 	}
 }
 
@@ -239,7 +248,9 @@ func (pm *PillManager) eatPill(p *process.Process, pillName string) {
 	}
 
 	// Reseting the known processes
-	pm.knownProcs = make(map[int32]*ProcessInfo)
+	for _, procInfo := range pm.knownProcs {
+		procInfo.Reniced = false
+	}
 
 	if p != nil {
 		pm.currentProc = p.Pid
