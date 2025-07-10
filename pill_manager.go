@@ -72,8 +72,6 @@ func NewPillManager(cfg Config) *PillManager {
 			time.Sleep(timeBetweenRetries)
 		} else {
 			Logger.Info("Connected to dbus")
-			db.Close()
-			db = nil
 			break
 		}
 	}
