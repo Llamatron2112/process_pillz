@@ -35,7 +35,6 @@ func createLogger() *zap.SugaredLogger {
 	encoderConfig := zapcore.EncoderConfig{
 		MessageKey: "message",
 		LevelKey:   "level",
-		TimeKey:    "time",
 		EncodeLevel: func(l zapcore.Level, enc zapcore.PrimitiveArrayEncoder) {
 			var color string
 			switch l {
