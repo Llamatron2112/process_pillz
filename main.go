@@ -24,43 +24,28 @@ type Config struct {
 var Logger *zap.SugaredLogger
 
 func createLogger() *zap.SugaredLogger {
-	const (
-		red    = "\033[31m"
-		green  = "\033[32m"
-		yellow = "\033[33m"
-		blue   = "\033[34m"
-		reset  = "\033[0m"
-	)
 	// Custom encoder configuration for colored log output
 	encoderConfig := zapcore.EncoderConfig{
 		MessageKey: "message",
 		LevelKey:   "level",
 		EncodeLevel: func(l zapcore.Level, enc zapcore.PrimitiveArrayEncoder) {
-			var color string
+			// Use the built-in color encoder but trim to 3 letters
 			switch l {
 			case zapcore.DebugLevel:
-				color = blue
-
+				enc.AppendString("\033[34mDEB\033[0m") // Blue
 			case zapcore.InfoLevel:
-				color = green
-
+				enc.AppendString("\033[32mINF\033[0m") // Green
 			case zapcore.WarnLevel:
-				color = yellow
-
+				enc.AppendString("\033[33mWAR\033[0m") // Yellow
 			case zapcore.ErrorLevel:
-				color = red
-
+				enc.AppendString("\033[31mERR\033[0m") // Red
 			case zapcore.FatalLevel:
-				color = red
-
+				enc.AppendString("\033[31mFAT\033[0m") // Red
 			case zapcore.PanicLevel:
-				color = red
-
+				enc.AppendString("\033[31mPAN\033[0m") // Red
 			default:
-				color = reset
+				enc.AppendString(strings.ToUpper(l.String())[:3])
 			}
-
-			enc.AppendString(color + strings.ToUpper(l.String()) + reset)
 		},
 		EncodeTime:     zapcore.ISO8601TimeEncoder,
 		EncodeDuration: zapcore.StringDurationEncoder,
