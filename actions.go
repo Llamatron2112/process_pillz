@@ -1,79 +1,95 @@
 package main
 
 import (
-	"slices"
+	"fmt"
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
+	"github.com/godbus/dbus/v5"
 	"github.com/shirou/gopsutil/v4/process"
 )
 
+func (pm *PillManager) safeDBusCall(action func(*dbus.Conn) error) error {
+	maxRetries := 3
+	for attempt := range maxRetries {
+		// Check if connection is nil
+		if pm.dbusConn == nil {
+			var err error
+			pm.dbusConn, err = dbus.ConnectSystemBus()
+			if err != nil {
+				Logger.Errorf("D-Bus reconnection attempt %d failed: %v", attempt+1, err)
+				time.Sleep(time.Second) // Small delay between retries
+				continue
+			}
+		}
+
+		// Attempt the action
+		err := action(pm.dbusConn)
+		if err == nil {
+			return nil
+		}
+
+		// If action fails, potentially due to connection issue
+		Logger.Errorf("D-Bus call failed (attempt %d): %v", attempt+1, err)
+		pm.dbusConn.Close()
+		pm.dbusConn = nil
+	}
+
+	return fmt.Errorf("failed to perform D-Bus action after %d attempts", maxRetries)
+}
+
 // Sets the TuneD profile, using dbus
 func (pm *PillManager) setTunedProfile(profile string) {
-	obj := pm.dbusConn.Object("com.redhat.tuned", "/Tuned")
+	err := pm.safeDBusCall(func(conn *dbus.Conn) error {
+		obj := conn.Object("com.redhat.tuned", "/Tuned")
+		return obj.Call("com.redhat.tuned.control.switch_profile", 0, profile).Err
+	})
 
-	// Getting the available profiles list from TuneD
-	call := obj.Call("com.redhat.tuned.control.profiles", 0)
-	if call.Err != nil {
-		Logger.Errorf("failed to get profiles: %v", call.Err)
-	}
-
-	var allowedProfiles []string
-
-	err := call.Store(&allowedProfiles)
 	if err != nil {
-		Logger.Errorf("failed to parse allowedProfiles: %v", err)
-	}
-
-	// If the profile required in the config file doesn't exist, output an error and do nothing
-	if !slices.Contains(allowedProfiles, profile) {
-		Logger.Errorf("TuneD profile %s is not available", profile)
-		return
-	}
-
-	// Changing the profile
-	err = obj.Call("com.redhat.tuned.control.switch_profile", 0, profile).Err
-	if err != nil {
-		Logger.Errorf("Error with a tuned dbus message: %v", err)
+		Logger.Errorf("Failed to set TuneD profile: %v", err)
 	} else {
 		Logger.Infof("Tuned profile set to %s", profile)
+		return
 	}
 }
 
-// Starts or stops schedulers
+// Change the SCX scheduler, using dbus
 func (pm *PillManager) setScx(scx string) {
-	obj := pm.dbusConn.Object("org.scx.Loader", "/org/scx/Loader")
+	err := pm.safeDBusCall(func(conn *dbus.Conn) error {
+		obj := conn.Object("org.scx.Loader", "/org/scx/Loader")
 
-	if scx == "none" {
-		err := obj.Call("org.scx.Loader.StopScheduler", 0).Err
-		if err != nil {
-			Logger.Errorf("Error with scx_loader dbus message: %v", err)
+		if scx == "none" {
+			return obj.Call("org.scx.Loader.StopScheduler", 0).Err
 		} else {
-			Logger.Info("Scheduler stopped")
-		}
-	} else {
-		args := strings.Split(scx, " ")
+			args := strings.Split(scx, " ")
 
-		sched := args[0]
-		var mode uint
-		if len(args) > 1 {
-			i, err := strconv.Atoi(args[1])
-			if err != nil {
-				Logger.Errorf("Wrong scheduler mode %s using default (0)", args[1])
-				mode = 0
+			sched := args[0]
+			var mode uint
+			if len(args) > 1 {
+				i, err := strconv.Atoi(args[1])
+				if err != nil {
+					Logger.Errorf("Wrong scheduler mode %s using default (0)", args[1])
+					mode = 0
+				} else {
+					mode = uint(i)
+				}
 			} else {
-				mode = uint(i)
+				mode = 0
 			}
-		} else {
-			mode = 0
-		}
 
-		err := obj.Call("org.scx.Loader.SwitchScheduler", 0, "scx_"+sched, mode).Err
-		if err != nil {
-			Logger.Errorf("Error with a scx_loader dbus message: %v", err)
+			return obj.Call("org.scx.Loader.SwitchScheduler", 0, "scx_"+sched, mode).Err
+		}
+	})
+
+	if err != nil {
+		Logger.Errorf("Failed to set SCX scheduler: %v", err)
+	} else {
+		if scx == "none" {
+			Logger.Infof("SCX scheduler stopped")
 		} else {
-			Logger.Infof("Scheduler switched to %s", scx)
+			Logger.Infof("SCX scheduler set to %s", scx)
 		}
 	}
 }

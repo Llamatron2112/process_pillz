@@ -57,19 +57,32 @@ func (pm *PillManager) getValidParent(p *process.Process) int32 {
 	return pPar.Pid
 }
 
-// The object storing all the data
+// The object storing the state of the pill manager
 func NewPillManager(cfg Config) *PillManager {
 	// Connecting to dbus
-	db, err := dbus.ConnectSystemBus()
-	if err != nil {
-		Logger.Fatalf("Couldn't connect to dbus")
+	maxRetries := 3
+	timeBetweenRetries := 3 * time.Second
+	var db *dbus.Conn
+
+	for i := range maxRetries {
+		var err error
+		db, err = dbus.ConnectSystemBus()
+		if err != nil {
+			Logger.Errorf("Couldn't connect to dbus (try %d/%d) %v", i+1, maxRetries, err)
+			time.Sleep(timeBetweenRetries)
+		} else {
+			Logger.Info("Connected to dbus")
+			db.Close()
+			db = nil
+			break
+		}
 	}
 
 	if db == nil {
-		Logger.Fatal("Dbus connection is nil")
+		Logger.Fatal("Couldn't connect to dbus")
 	}
 
-	user, _ := user.Current()
+	user, err := user.Current()
 	if err != nil {
 		Logger.Fatalf("Couldn't find the current user's name. %v", err)
 	}
