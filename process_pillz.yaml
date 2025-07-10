@@ -1,9 +1,9 @@
-scan_interval: 3
+scan_interval: 4
 
 triggers:
   WoWClassic.exe: game
   DuneSandbox.exe: game
-  "SteamLaunch AppId=1203620": game # Enshrouded
+  "SteamLaunch AppId=892970": game # Valheim
   kcalc: ai
 
 pills:

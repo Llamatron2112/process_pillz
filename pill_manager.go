@@ -35,6 +35,28 @@ type PillManager struct {
 
 var invalidParents = []string{"systemd", "bash", "sh", "zsh", "fish", "steam"}
 
+// Function that returns the parent process, or the process itself if the parent was unusable
+func (pm *PillManager) getValidParent(p *process.Process) int32 {
+	pPar, err := p.Parent()
+	if err != nil {
+		Logger.Warnf("Couldn't find the parent of trigger process %d", p.Pid)
+		return p.Pid
+	}
+
+	parName, err := pPar.Name()
+	if err != nil {
+		Logger.Warnf("Couldn't find the parent name %d", p.Pid)
+		return p.Pid
+	}
+
+	if slices.Contains(invalidParents, parName) {
+		Logger.Warnf("Invalid parent name %s", parName)
+		return p.Pid
+	}
+
+	return pPar.Pid
+}
+
 // The object storing all the data
 func NewPillManager(cfg Config) *PillManager {
 	// Connecting to dbus
@@ -212,28 +234,7 @@ func (pm *PillManager) scanProcesses() {
 
 	} else if shouldKeepCurrentPill && triggerProcess.Pid != pm.currentProc {
 		pm.currentProc = triggerProcess.Pid
-		pPar, err := triggerProcess.Parent()
-
-		if err != nil {
-			Logger.Warnf("Couldn't find the parent of trigger process %d", triggerProcess.Pid)
-			pm.currentParent = triggerProcess.Pid
-		}
-
-		parName, err := pPar.Name()
-		if err != nil {
-			Logger.Warnf("Couldn't find the parent name %d", triggerProcess.Pid)
-			pm.currentParent = triggerProcess.Pid
-		}
-
-		if slices.Contains(invalidParents, parName) {
-			Logger.Warnf("Invalid parent name %s", parName)
-			pm.currentParent = triggerProcess.Pid
-		}
-
-		if pm.currentParent != triggerProcess.Pid {
-			pm.currentParent = pPar.Pid
-		}
-
+		pm.currentParent = pm.getValidParent(triggerProcess)
 		Logger.Infof("Changed trigger process to %d with parent %d", pm.currentProc, pm.currentParent)
 	}
 }
@@ -266,25 +267,8 @@ func (pm *PillManager) eatPill(p *process.Process, pillName string) {
 
 	if p != nil {
 		pm.currentProc = p.Pid
+		pm.currentParent = pm.getValidParent(p)
 
-		// Getting a proper parent, in case the parent is invalid process is its own parent
-		newParent, err := p.Parent()
-		if err != nil {
-			pm.currentParent = p.Pid
-		}
-
-		newParentName, err := newParent.Name()
-		if err != nil {
-			pm.currentParent = p.Pid
-		}
-
-		if slices.Contains(invalidParents, newParentName) {
-			pm.currentParent = p.Pid
-		}
-
-		if pm.currentParent != p.Pid {
-			pm.currentParent = newParent.Pid
-		}
 	} else {
 		pm.currentProc = 0
 		pm.currentParent = 0
