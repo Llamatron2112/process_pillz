@@ -1,9 +1,34 @@
+# Configuration file for Process Pillz
+#
+#  * scan_interval: time between processes polling, in seconds
+#
+#  * triggers: these are a key:value pair. The key is a string that is going to be matched
+#    against the process command line. If the command line of a process contains the key,
+#    the value is used to select a pill. It is often a good idea to put the key in quotes,
+#    when it contains spaces or special characters.
+#
+#  * pills: these are the actual profiles. The key is the name of the pill, and the value
+#    is a dictionary with its properties :
+#
+#    * scx: the name of the Sched-ext scheduler to use. Use the name without the scx_ prefix.
+#      You can specify a number that corresponds to the mode of the scheduler:
+#      0 = Auto, 1 = Gaming, 2 = PowerSave, 3 = LowLatency, 4 = Server
+#
+#    * tuned: the name of the tuned profile to use.
+#
+#    * nice: the program will attempt to detect the trigger process' sibling and children
+#      processes, and apply this level of nice to them. You need to have configured your
+#      system to allow your current user to renice processes.
+#      Mind that not all scx_schedulers support nice values, so it might have no effect,
+#      or even negative effects. Do your research. (hint: lavd is usually a good scheduler
+#      for gaming, and supports nice values)
+
 scan_interval: 4
 
 triggers:
   WoWClassic.exe: game
   DuneSandbox.exe: game
-  "SteamLaunch AppId=892970": game # Valheim
+  "SteamLaunch AppId=979690": game # The Ascent
   kcalc: ai
 
 pills:
