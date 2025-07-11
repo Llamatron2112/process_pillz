@@ -8,10 +8,7 @@
 - **SCX Scheduler Support**: Integrates with [Sched-ext](https://github.com/sched-ext/scx) schedulers for advanced CPU scheduling
 - **TuneD Integration**: Automatically switches TuneD profiles for system optimization
 - **Process Nice Management**: Applies nice values to processes and their children for priority management
-- **Security-First**: Validates configuration file permissions and ownership
-- **Multi-Path Config**: Searches multiple locations for configuration files
-- **Systemd Integration**: Includes user service files for automatic startup and management
-- **Robust Error Handling**: Graceful degradation and automatic reconnection for D-Bus operations
+- **Systemd Integration**: Includes user service files for automatic startup and 
 
 ## Requirements
 
@@ -47,22 +44,6 @@
    systemctl --user enable process_pillz
    systemctl --user start process_pillz
    ```
-
-### Manual Installation
-
-If you prefer to install manually:
-
-```bash
-# Build the binary
-make build
-
-# Copy files manually
-sudo cp process_pillz /usr/bin/
-sudo cp systemd/user/*.service /etc/systemd/user/
-sudo cp systemd/user/*.path /etc/systemd/user/
-sudo mkdir -p /usr/share/process_pillz
-sudo cp process_pillz.yaml /usr/share/process_pillz/process_pillz.yaml.example
-```
 
 ## Configuration
 
