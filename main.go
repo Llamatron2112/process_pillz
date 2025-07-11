@@ -5,12 +5,20 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/yaml.v3"
+)
+
+// Version information - set by build flags
+var (
+	Version   = "dev"
+	GitCommit = "unknown"
+	BuildTime = "unknown"
 )
 
 // Structure of the YAML configuration file.
@@ -135,36 +143,81 @@ func validateConfigSecurity(configPath string) error {
 	return nil
 }
 
-func main() {
-	Logger = createLogger()
+// Find configuration file by searching in multiple locations
+func findConfigFile() (string, error) {
+	var searchPaths []string
 
-	// Configuration loading
-	configDir, err := os.UserConfigDir()
-	if err != nil {
-		Logger.Panicf("Couldn't define the config directory")
+	// Get user config directory
+	if configDir, err := os.UserConfigDir(); err == nil {
+		searchPaths = append(searchPaths,
+			filepath.Join(configDir, "process_pillz.yaml"),
+			filepath.Join(configDir, "process_pillz", "config.yaml"),
+		)
 	}
 
-	err = validateConfigSecurity(configDir + "/process_pillz.yaml")
-	if err != nil {
-		Logger.Fatal(err)
+	// Add system-wide and example paths
+	searchPaths = append(searchPaths,
+		"/etc/process_pillz/config.yaml",
+		"/usr/share/process_pillz/process_pillz.yaml.example",
+	)
+
+	var triedPaths []string
+	for _, path := range searchPaths {
+		triedPaths = append(triedPaths, path)
+		if _, err := os.Stat(path); err == nil {
+			return path, nil
+		}
 	}
 
-	data, err := os.ReadFile(configDir + "/process_pillz.yaml")
+	return "", fmt.Errorf("no configuration file found. Searched paths:\n  %s", strings.Join(triedPaths, "\n  "))
+}
+
+// Load and validate configuration from file
+func loadConfig() (*Config, string, error) {
+	configPath, err := findConfigFile()
 	if err != nil {
-		Logger.Panicf("Error while opening configuration file: %v", err)
+		return nil, "", err
+	}
+
+	// Only validate security for user-owned files (not system examples)
+	if !strings.HasPrefix(configPath, "/usr/share/") {
+		if err := validateConfigSecurity(configPath); err != nil {
+			return nil, "", fmt.Errorf("config security validation failed for %s: %v", configPath, err)
+		}
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, "", fmt.Errorf("error reading config file %s: %v", configPath, err)
 	}
 
 	var config Config
 	if err := yaml.Unmarshal(data, &config); err != nil {
-		Logger.Panicf("Error while parsing configuration file: %v", err)
+		return nil, "", fmt.Errorf("error parsing config file %s: %v", configPath, err)
 	}
 
 	if err := validateConfig(&config); err != nil {
-		Logger.Panicf("Configuration validation failed: %v", err)
+		return nil, "", fmt.Errorf("config validation failed for %s: %v", configPath, err)
 	}
 
+	return &config, configPath, nil
+}
+
+func main() {
+	Logger = createLogger()
+
+	Logger.Infof("Process Pillz %s (commit %s, built %s)", Version, GitCommit, BuildTime)
+
+	// Configuration loading with multi-path support
+	config, configPath, err := loadConfig()
+	if err != nil {
+		Logger.Fatalf("Configuration error: %v", err)
+	}
+
+	Logger.Infof("Using configuration file: %s", configPath)
+
 	// Initializing the manager and starting the loop
-	pm := NewPillManager(config)
+	pm := NewPillManager(*config)
 	defer pm.dbusConn.Close()
 	defer pm.ticker.Stop()
 
