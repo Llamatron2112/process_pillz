@@ -119,6 +119,10 @@ func (pm *PillManager) reniceCheck(p *process.Process, nice int) {
 		return
 	}
 
+	if slices.Contains(pm.blacklist, procInfo.Name) {
+		return
+	}
+
 	// Get parent process info
 	pParent, err := p.Parent()
 	if err != nil {

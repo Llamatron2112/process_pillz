@@ -8,7 +8,7 @@
 - **SCX Scheduler Support**: Integrates with [Sched-ext](https://github.com/sched-ext/scx) schedulers for advanced CPU scheduling
 - **TuneD Integration**: Automatically switches TuneD profiles for system optimization
 - **Process Nice Management**: Applies nice values to processes and their children for priority management
-- **Systemd Integration**: Includes user service files for automatic startup and 
+- **Systemd Integration**: Includes user service files for automatic startup and
 
 ## Requirements
 
@@ -54,35 +54,6 @@ Process Pillz searches for configuration files in the following order:
 3. `/etc/process_pillz/config.yaml`
 4. `/usr/share/process_pillz/process_pillz.yaml.example`
 
-### Example Configuration
-
-```yaml
-# Scan interval in seconds
-scan_interval: 4
-
-# Process triggers - when these strings are found in command lines
-triggers:
-  WoWClassic.exe: game                    # World of Warcraft Classic
-  DuneSandbox.exe: game                   # Dune: Spice Wars
-  "SteamLaunch AppId=979690": game        # The Ascent (Steam)
-  kcalc: ai                               # Calculator (example)
-
-# Performance profiles
-pills:
-  default:                                # Default profile (fallback)
-    scx: none                             # No SCX scheduler
-    tuned: desktop                        # Desktop TuneD profile
-    
-  game:                                   # Gaming profile
-    tuned: gaming                         # Gaming TuneD profile
-    scx: lavd 1                           # SCX LAVD scheduler in gaming mode
-    nice: -10                             # High priority for game processes
-    
-  ai:                                     # AI/compute workload profile
-    tuned: accelerator-performance        # High-performance TuneD profile
-    scx: bpfland                          # SCX bpfland scheduler
-```
-
 ### Configuration Options
 
 #### Global Settings
@@ -99,12 +70,14 @@ Each profile can contain:
   - Format: `scheduler_name [mode]`
   - Mode: 0=Auto, 1=Gaming, 2=PowerSave, 3=LowLatency, 4=Server
   - Use `none` to disable SCX scheduling
-  
+
 - **`tuned`**: TuneD profile name to activate
 
 - **`nice`**: Nice value (-20 to 20) to apply to trigger process and children
   - Lower values = higher priority
   - Not allowed in `default` profile for safety
+
+- **`blacklist`**: Processes that will never be reniced, designated by their executable name
 
 ## Usage
 
@@ -123,21 +96,6 @@ systemctl --user status process_pillz
 # View logs
 journalctl --user -u process_pillz -f
 ```
-
-### Development
-
-```bash
-# Build for development (with debug info)
-make dev
-
-# Install to ~/bin for testing
-make dev-install
-
-# Run directly (not recommended for normal use)
-./process_pillz
-```
-
-## Permissions Setup
 
 ### Process Nice Values
 
@@ -231,11 +189,5 @@ This project is in beta. When reporting issues, please include:
 - Process Pillz version (`make version`)
 - Configuration file (redacted as needed)
 - Relevant log output
-
-## License
-
-[Insert License Information]
-
----
 
 **Process Pillz** - Automatic performance profile switching for Linux gaming and productivity.

@@ -29,6 +29,7 @@ type PillManager struct {
 	currentProc   int32
 	currentParent int32
 	userName      string                 // User running the daemon
+	blacklist     []string               // Processes that are blacklisted for renice
 	knownProcs    map[int32]*ProcessInfo // Cached process information
 	currentScan   map[int32]bool         // Reused map for tracking current scan
 }
@@ -85,6 +86,7 @@ func NewPillManager(cfg Config) *PillManager {
 		currentProc:   0,
 		currentParent: 0,
 		userName:      user.Username,
+		blacklist:     cfg.Blacklist,
 		knownProcs:    make(map[int32]*ProcessInfo),
 		currentScan:   make(map[int32]bool),
 	}

@@ -22,13 +22,16 @@
 #      Mind that not all scx_schedulers support nice values, so it might have no effect,
 #      or even negative effects. Do your research. (hint: lavd is usually a good scheduler
 #      for gaming, and supports nice values)
+#
+#   * blacklist: a list of processes that will not be reniced. Identified by their executable
+#     name.
 
 scan_interval: 4
 
 triggers:
   WoWClassic.exe: game
-  "SteamLaunch AppId=1172710": game # Dune
-  "SteamLaunch AppId=892970": game # Valheim
+  DuneSandbox.exe: game
+  EpicWebHelper.exe: game # Throne & Liberty
   kcalc: ai
 
 pills:
@@ -42,3 +45,10 @@ pills:
   ai:
     tuned: accelerator-performance
     scx: scx_bpfland
+
+blacklist:
+  - srt-bwrap
+  - reaper
+  - pv-adverb
+  - pressure-vessel-wrap
+  - bottles

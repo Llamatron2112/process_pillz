@@ -25,6 +25,7 @@ type Config struct {
 	ScanInterval int                          `yaml:"scan_interval"`
 	Triggers     map[string]string            `yaml:"triggers"`
 	Pills        map[string]map[string]string `yaml:"pills"`
+	Blacklist    []string                     `yaml:"blacklist"`
 }
 
 // Create and configure the zap logger
