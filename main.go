@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -218,6 +217,9 @@ func main() {
 
 	// Initializing the manager and starting the loop
 	pm := NewPillManager(*config)
+
+	pm.connectToDbus()
+
 	defer pm.dbusConn.Close()
 	defer pm.ticker.Stop()
 
@@ -227,8 +229,10 @@ func main() {
 
 	go func() {
 		<-sigChan
-		log.Println("Shutting down...")
+		Logger.Info("Shutting down...")
 		pm.eatPill(nil, "default") // Reset to default profile
+		pm.dbusConn.Close()
+		pm.ticker.Stop()
 		os.Exit(0)
 	}()
 

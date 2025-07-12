@@ -1,4 +1,4 @@
-module local/process_pillz
+module github.com/Llamatron2112/process_pillz
 
 go 1.24.4
 

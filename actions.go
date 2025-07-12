@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -11,87 +12,97 @@ import (
 	"github.com/shirou/gopsutil/v4/process"
 )
 
-func (pm *PillManager) safeDBusCall(action func(*dbus.Conn) error) error {
+func (pm *PillManager) connectToDbus() error {
 	maxRetries := 3
-	for attempt := range maxRetries {
-		// Check if connection is nil
-		if pm.dbusConn == nil {
+	timeBetweenRetries := 2 * time.Second
+	if pm.dbusConn == nil {
+		for i := range maxRetries {
 			var err error
 			pm.dbusConn, err = dbus.ConnectSystemBus()
 			if err != nil {
-				Logger.Errorf("D-Bus reconnection attempt %d failed: %v", attempt+1, err)
-				time.Sleep(time.Second) // Small delay between retries
-				continue
+				Logger.Errorf("Couldn't connect to dbus (try %d/%d) %v", i+1, maxRetries, err)
+				time.Sleep(timeBetweenRetries)
+			} else {
+				Logger.Info("Connected to dbus")
+				break
 			}
 		}
-
-		// Attempt the action
-		err := action(pm.dbusConn)
-		if err == nil {
-			return nil
-		}
-
-		// If action fails, potentially due to connection issue
-		Logger.Errorf("D-Bus call failed (attempt %d): %v", attempt+1, err)
-		pm.dbusConn.Close()
-		pm.dbusConn = nil
 	}
-
-	return fmt.Errorf("failed to perform D-Bus action after %d attempts", maxRetries)
+	if pm.dbusConn == nil {
+		return fmt.Errorf("Couldn't connect to dbus after %d tries.", maxRetries)
+	} else {
+		return nil
+	}
 }
 
 // Sets the TuneD profile, using dbus
-func (pm *PillManager) setTunedProfile(profile string) {
-	err := pm.safeDBusCall(func(conn *dbus.Conn) error {
-		obj := conn.Object("com.redhat.tuned", "/Tuned")
-		return obj.Call("com.redhat.tuned.control.switch_profile", 0, profile).Err
-	})
-
+func (pm *PillManager) setTunedProfile(profile string) error {
+	err := pm.connectToDbus()
 	if err != nil {
-		Logger.Errorf("Failed to set TuneD profile: %v", err)
-	} else {
-		Logger.Infof("Tuned profile set to %s", profile)
-		return
+		return fmt.Errorf("Failed to connect to dbus : %v", err)
 	}
+
+	obj := pm.dbusConn.Object("com.redhat.tuned", "/Tuned")
+	if obj == nil {
+		return fmt.Errorf("failed to connnect to TuneD. Is it running?")
+	}
+
+	validProfiles := obj.Call("com.redhat.tuned.control.profiles", 0).Body[0].([]string)
+	if !slices.Contains(validProfiles, profile) {
+		return fmt.Errorf("Invalid TuneD profile (%s)", profile)
+	}
+
+	return obj.Call("com.redhat.tuned.control.switch_profile", 0, profile).Err
 }
 
 // Change the SCX scheduler, using dbus
-func (pm *PillManager) setScx(scx string) {
-	err := pm.safeDBusCall(func(conn *dbus.Conn) error {
-		obj := conn.Object("org.scx.Loader", "/org/scx/Loader")
-
-		if scx == "none" {
-			return obj.Call("org.scx.Loader.StopScheduler", 0).Err
-		} else {
-			args := strings.Split(scx, " ")
-
-			sched := args[0]
-			var mode uint
-			if len(args) > 1 {
-				i, err := strconv.Atoi(args[1])
-				if err != nil {
-					Logger.Errorf("Wrong scheduler mode %s using default (0)", args[1])
-					mode = 0
-				} else {
-					mode = uint(i)
-				}
-			} else {
-				mode = 0
-			}
-
-			return obj.Call("org.scx.Loader.SwitchScheduler", 0, "scx_"+sched, mode).Err
-		}
-	})
-
+func (pm *PillManager) setScx(scx string) error {
+	err := pm.connectToDbus()
 	if err != nil {
-		Logger.Errorf("Failed to set SCX scheduler: %v", err)
-	} else {
-		if scx == "none" {
-			Logger.Infof("SCX scheduler stopped")
-		} else {
-			Logger.Infof("SCX scheduler set to %s", scx)
-		}
+		return fmt.Errorf("Failed to connect to dbus : %v", err)
 	}
+
+	obj := pm.dbusConn.Object("org.scx.Loader", "/org/scx/Loader")
+	if obj == nil {
+		return fmt.Errorf("Couldn't connect to scx_loader, is it running ?")
+	}
+
+	// If scheduler is set to none, stop any currently running scheduler
+	if scx == "none" {
+		return obj.Call("org.scx.Loader.StopScheduler", 0).Err
+	}
+
+	// Split the config string
+	args := strings.Split(scx, " ")
+	sched := args[0]
+
+	// Checking if the scheduler is supported by scx_loader
+	request, err := obj.GetProperty("org.scx.Loader.SupportedSchedulers")
+	if err != nil {
+		return fmt.Errorf("Couldn't get the list of schedulers from scx_loader")
+	}
+
+	supportedSchedulers := request.Value().([]string)
+	if !slices.Contains(supportedSchedulers, sched) {
+		return fmt.Errorf("Invalid scheduler (%s)", sched)
+	}
+
+	// Checking the scheduler mode if one is specified, if not use 0
+	var mode uint
+	if len(args) > 1 {
+		i, err := strconv.Atoi(args[1])
+		if err != nil || i < 0 || i > 4 {
+			Logger.Errorf("Wrong scheduler mode %s using default (0)", args[1])
+			mode = 0
+		} else {
+			mode = uint(i)
+		}
+	} else {
+		mode = 0
+	}
+
+	// Executing the scheduler switch
+	return obj.Call("org.scx.Loader.SwitchScheduler", 0, sched, mode).Err
 }
 
 // Check a process and its parent, and determines if it is elligible to being reniced

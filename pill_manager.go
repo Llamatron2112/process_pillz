@@ -59,27 +59,6 @@ func (pm *PillManager) getValidParent(p *process.Process) int32 {
 
 // The object storing the state of the pill manager
 func NewPillManager(cfg Config) *PillManager {
-	// Connecting to dbus
-	maxRetries := 3
-	timeBetweenRetries := 3 * time.Second
-	var db *dbus.Conn
-
-	for i := range maxRetries {
-		var err error
-		db, err = dbus.ConnectSystemBus()
-		if err != nil {
-			Logger.Errorf("Couldn't connect to dbus (try %d/%d) %v", i+1, maxRetries, err)
-			time.Sleep(timeBetweenRetries)
-		} else {
-			Logger.Info("Connected to dbus")
-			break
-		}
-	}
-
-	if db == nil {
-		Logger.Fatal("Couldn't connect to dbus")
-	}
-
 	user, err := user.Current()
 	if err != nil {
 		Logger.Fatalf("Couldn't find the current user's name. %v", err)
@@ -99,7 +78,7 @@ func NewPillManager(cfg Config) *PillManager {
 	return &PillManager{
 		Triggers:      cfg.Triggers,
 		Pillz:         cfg.Pills,
-		dbusConn:      db,
+		dbusConn:      nil,
 		ticker:        ticker,
 		scanInterval:  scanInterval,
 		CurrentPill:   "",
@@ -259,13 +238,26 @@ func (pm *PillManager) eatPill(p *process.Process, pillName string) {
 	for name, value := range settings {
 		switch name {
 		case "scx":
-			pm.setScx(value)
+			err := pm.setScx(value)
+			if err != nil {
+				Logger.Errorf("Failed to change the scheduler : %v", err)
+			} else {
+				Logger.Infof("Scheduler set to %s", value)
+			}
+
 		case "tuned":
-			pm.setTunedProfile(value)
+			err := pm.setTunedProfile(value)
+			if err != nil {
+				Logger.Errorf("Failed to set TuneD profile : %v", err)
+			} else {
+				Logger.Infof("TuneD profile set to %s", value)
+			}
+
 		case "nice":
 			if pillName == "default" {
 				Logger.Warn("Nice is not autorized in the default profile, ignoring")
 			}
+
 		default:
 			Logger.Errorf("Unknown option: %s", name)
 		}
