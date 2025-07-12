@@ -3,6 +3,7 @@ module github.com/Llamatron2112/process_pillz
 go 1.24.4
 
 require (
+	github.com/fsnotify/fsnotify v1.9.0
 	github.com/godbus/dbus/v5 v5.1.0
 	github.com/shirou/gopsutil/v4 v4.25.6
 	go.uber.org/zap v1.27.0

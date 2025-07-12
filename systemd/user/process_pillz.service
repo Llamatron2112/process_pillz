@@ -1,12 +1,15 @@
 [Unit]
-Description=Automatically switch tuned profile and sched-ext based on process
-Wants=process_pillz-restarter.path
+Description=Process Pillz
+After=network.target
 
 [Service]
 ExecStart=process_pillz
 Type=simple
-StandardOutput=journal
-StandardError=journal
+Restart=always
+RestartSec=1
+SuccessExitStatus=42
+#StandardOutput=journal
+#StandardError=journal
 
 # Security options
 NoNewPrivileges=yes

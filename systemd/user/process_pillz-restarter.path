@@ -1,9 +1,0 @@
-[Unit]
-Description=Watch changes to process_pillz's config
-
-[Path]
-PathChanged=%h/.config/process_pillz.yaml
-
-[Install]
-WantedBy=default.target
-

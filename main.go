@@ -7,7 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/yaml.v3"
@@ -203,6 +205,60 @@ func loadConfig() (*Config, string, error) {
 	return &config, configPath, nil
 }
 
+// watchConfigFile watches the config file and sends a signal when it changes
+func watchConfigFile(configPath string, restartChan chan struct{}) {
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		Logger.Errorf("Failed to create config watcher: %v", err)
+		return
+	}
+	defer watcher.Close()
+
+	// Watch the config file
+	err = watcher.Add(configPath)
+	if err != nil {
+		Logger.Errorf("Failed to watch config file: %v", err)
+		return
+	}
+
+	Logger.Infof("Watching config file for changes: %s", configPath)
+
+	// Debounce timer to avoid multiple rapid restarts
+	var debounceTimer *time.Timer
+	const debounceDelay = 1 * time.Second
+
+	for {
+		select {
+		case event, ok := <-watcher.Events:
+			if !ok {
+				return
+			}
+
+			if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) {
+				Logger.Infof("Config file changed: %s", event.Name)
+
+				// Reset debounce timer
+				if debounceTimer != nil {
+					debounceTimer.Stop()
+				}
+				debounceTimer = time.AfterFunc(debounceDelay, func() {
+					select {
+					case restartChan <- struct{}{}:
+					default:
+						// Channel is full, restart already pending
+					}
+				})
+			}
+
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				return
+			}
+			Logger.Errorf("Config watcher error: %v", err)
+		}
+	}
+}
+
 func main() {
 	Logger = createLogger()
 
@@ -216,6 +272,9 @@ func main() {
 
 	Logger.Infof("Using configuration file: %s", configPath)
 
+	// Create restart channel for config watcher
+	restartChan := make(chan struct{}, 1)
+
 	// Initializing the manager and starting the loop
 	pm := NewPillManager(*config)
 
@@ -224,20 +283,29 @@ func main() {
 	defer pm.dbusConn.Close()
 	defer pm.ticker.Stop()
 
+	// Start config file watcher in a goroutine
+	go watchConfigFile(configPath, restartChan)
+
 	// Handle graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	go func() {
-		<-sigChan
-		Logger.Info("Shutting down...")
-		pm.eatPill(nil, "default") // Reset to default profile
-		pm.dbusConn.Close()
-		pm.ticker.Stop()
-		os.Exit(0)
-	}()
+	for {
+		select {
+		case <-sigChan:
+			Logger.Info("Shutting down...")
+			pm.eatPill(nil, "default") // Reset to default profile
+			pm.Close()
+			os.Exit(0)
 
-	for range pm.ticker.C {
-		pm.scanProcesses()
+		case <-restartChan:
+			Logger.Info("Config file changed, restarting...")
+			pm.eatPill(nil, "default") // Reset to default profile
+			pm.Close()
+			os.Exit(42) // Special exit code to indicate restart needed
+
+		case <-pm.ticker.C:
+			pm.scanProcesses()
+		}
 	}
 }
