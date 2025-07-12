@@ -27,8 +27,8 @@ scan_interval: 4
 
 triggers:
   WoWClassic.exe: game
-  DuneSandbox.exe: game
-  "SteamLaunch AppId=979690": game # The Ascent
+  "SteamLaunch AppId=1172710": game # Dune
+  "SteamLaunch AppId=892970": game # Valheim
   kcalc: ai
 
 pills:
@@ -37,8 +37,8 @@ pills:
     tuned: desktop
   game:
     tuned: gaming
-    scx: lavd 1
+    scx: scx_lavd 1
     nice: -10
   ai:
     tuned: accelerator-performance
-    scx: bpfland
+    scx: scx_bpfland

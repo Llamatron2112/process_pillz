@@ -33,7 +33,7 @@ type PillManager struct {
 	currentScan   map[int32]bool         // Reused map for tracking current scan
 }
 
-var invalidParents = []string{"systemd", "bash", "sh", "zsh", "fish", "steam"}
+var invalidParents = []string{"systemd", "srt-bwrap", "steam"}
 
 // Function that returns the parent process, or the process itself if the parent was unusable
 func (pm *PillManager) getValidParent(p *process.Process) int32 {
@@ -51,7 +51,7 @@ func (pm *PillManager) getValidParent(p *process.Process) int32 {
 
 	if slices.Contains(invalidParents, parName) {
 		Logger.Warnf("Invalid parent name %s", parName)
-		return p.Pid
+		return -1
 	}
 
 	return pPar.Pid
